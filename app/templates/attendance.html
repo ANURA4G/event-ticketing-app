@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance - HACKFEST2K26{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <a href="/admin/dashboard"
+                class="text-gray-400 hover:text-white transition text-sm inline-flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                Dashboard
+            </a>
+            <h1 class="text-2xl font-bold text-white mt-2">Attendance Log</h1>
+            <p class="text-gray-400">{{ records|length }} check-ins recorded</p>
+        </div>
+        <a href="/scan" class="px-4 py-2 btn-primary-custom rounded-lg">
+            Open Scanner
+        </a>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="glass rounded-xl p-6 text-center">
+            <p class="text-3xl font-bold text-white">{{ stats.total_tickets }}</p>
+            <p class="text-gray-400 text-sm">Total</p>
+        </div>
+        <div class="glass rounded-xl p-6 text-center">
+            <p class="text-3xl font-bold text-green-400">{{ stats.checked_in }}</p>
+            <p class="text-gray-400 text-sm">Present</p>
+        </div>
+        <div class="glass rounded-xl p-6 text-center">
+            <p class="text-3xl font-bold text-yellow-400">{{ stats.pending }}</p>
+            <p class="text-gray-400 text-sm">Pending</p>
+        </div>
+    </div>
+
+    <!-- Records Table -->
+    <div class="glass rounded-xl overflow-hidden">
+        <table class="w-full table-dark-custom">
+            <thead>
+                <tr>
+                    <th class="text-left py-4 px-6">Team</th>
+                    <th class="text-left py-4 px-6">Ticket ID</th>
+                    <th class="text-left py-4 px-6">Check-in Time</th>
+                    <th class="text-left py-4 px-6">Scanned By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if records %}
+                {% for record in records %}
+                <tr>
+                    <td class="py-4 px-6 font-medium">{{ record.team_name }}</td>
+                    <td class="py-4 px-6 font-mono text-sm text-gray-400">{{ record.ticket_id }}</td>
+                    <td class="py-4 px-6 text-gray-400">{{ record.timestamp }}</td>
+                    <td class="py-4 px-6 text-gray-400">{{ record.scanned_by }}</td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="4" class="py-12 text-center text-gray-500">
+                        No check-ins yet
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

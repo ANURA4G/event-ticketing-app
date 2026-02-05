@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+
+{% block title %}QR Scanner - HACKFEST2K26{% endblock %}
+
+{% block extra_head %}
+<!-- html5-qrcode library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+    #reader {
+        width: 100%;
+        max-width: 500px;
+        margin: 0 auto;
+    }
+
+    #reader video {
+        border-radius: 12px;
+    }
+
+    #reader__scan_region {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    #reader__dashboard {
+        padding: 10px 0;
+    }
+
+    #reader__dashboard button {
+        background: linear-gradient(135deg, #6366f1, #ec4899) !important;
+        color: white !important;
+        border: none !important;
+        padding: 12px 24px !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+    }
+
+    #reader__dashboard select {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        padding: 8px 12px !important;
+        border-radius: 6px !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8 text-center">
+        <h1 class="text-2xl font-bold text-white">QR Scanner</h1>
+        <p class="text-gray-400 mt-1">Scan entry passes to verify and mark attendance</p>
+    </div>
+
+    <!-- Scanner Container -->
+    <div class="glass rounded-xl p-6 mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-white font-semibold">Camera Scanner</h3>
+            <button id="flip-camera-btn"
+                class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-colors flex items-center gap-2"
+                style="display: none;">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span class="text-sm">Flip</span>
+            </button>
+        </div>
+        <div id="reader"></div>
+        <div id="scanner-status" class="text-center mt-4 text-gray-400 text-sm">
+            Initializing camera...
+        </div>
+    </div>
+
+    <!-- Result Display -->
+    <div id="result-container" class="hidden">
+        <div id="result-card" class="glass rounded-xl p-8 text-center">
+            <!-- Dynamically populated -->
+        </div>
+    </div>
+
+    <!-- Manual Entry -->
+    <div class="glass rounded-xl p-6 mt-6">
+        <h3 class="text-white font-semibold mb-4 text-center">Manual Entry</h3>
+        <form id="manual-form" class="flex gap-3">
+            <input type="text" id="manual-ticket-id"
+                class="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Enter Ticket ID">
+            <button type="submit" class="px-6 py-3 btn-primary-custom rounded-lg">
+                Verify
+            </button>
+        </form>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-2 gap-4 mt-6">
+        <a href="/admin/attendance" class="glass rounded-xl p-4 text-center card-hover">
+            <p class="text-gray-400 text-sm">View Attendance</p>
+            <p class="text-white font-semibold mt-1">Check Records</p>
+        </a>
+        <a href="/admin/dashboard" class="glass rounded-xl p-4 text-center card-hover">
+            <p class="text-gray-400 text-sm">Back to</p>
+            <p class="text-white font-semibold mt-1">Dashboard</p>
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const resultContainer = document.getElementById('result-container');
+        const resultCard = document.getElementById('result-card');
+        const statusDiv = document.getElementById('scanner-status');
+        const flipButton = document.getElementById('flip-camera-btn');
+
+        // Initialize scanner
+        const html5QrCode = new Html5Qrcode("reader");
+
+        // Camera management
+        let availableCameras = [];
+        let currentCameraIndex = 0;
+        let isScanning = false;
+
+        const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0
+        };
+
+        // Success callback
+        function onScanSuccess(decodedText, decodedResult) {
+            // Stop scanning temporarily
+            html5QrCode.pause();
+
+            // Show processing
+            statusDiv.textContent = 'Verifying...';
+            statusDiv.className = 'text-center mt-4 text-yellow-400 text-sm';
+
+            // Send to backend
+            verifyQRPayload(decodedText);
+        }
+
+        // Error callback
+        function onScanError(errorMessage) {
+            // Ignore scan errors (no QR found)
+        }
+
+        // Start camera function
+        function startCamera(cameraIndex) {
+            if (availableCameras.length === 0) return;
+
+            const cameraId = availableCameras[cameraIndex].id;
+
+            html5QrCode.start(
+                cameraId,
+                config,
+                onScanSuccess,
+                onScanError
+            ).then(() => {
+                isScanning = true;
+                statusDiv.textContent = 'Point camera at QR code';
+                statusDiv.className = 'text-center mt-4 text-green-400 text-sm';
+            }).catch(err => {
+                isScanning = false;
+                statusDiv.textContent = 'Camera error: ' + err;
+                statusDiv.className = 'text-center mt-4 text-red-400 text-sm';
+            });
+        }
+
+        // Initialize cameras
+        Html5Qrcode.getCameras().then(cameras => {
+            if (cameras && cameras.length) {
+                availableCameras = cameras;
+
+                // Show flip button if multiple cameras available
+                if (cameras.length > 1) {
+                    flipButton.style.display = 'flex';
+                }
+
+                // Prefer back camera for initial load
+                let initialCameraIndex = 0;
+                for (let i = 0; i < cameras.length; i++) {
+                    const label = cameras[i].label.toLowerCase();
+                    if (label.includes('back') || label.includes('rear')) {
+                        initialCameraIndex = i;
+                        break;
+                    }
+                }
+
+                currentCameraIndex = initialCameraIndex;
+                startCamera(currentCameraIndex);
+            } else {
+                statusDiv.textContent = 'No cameras found';
+                statusDiv.className = 'text-center mt-4 text-red-400 text-sm';
+            }
+        }).catch(err => {
+            statusDiv.textContent = 'Camera access denied';
+            statusDiv.className = 'text-center mt-4 text-red-400 text-sm';
+        });
+
+        // Flip camera button handler
+        flipButton.addEventListener('click', function () {
+            if (!isScanning || availableCameras.length <= 1) return;
+
+            // Stop current camera
+            html5QrCode.stop().then(() => {
+                // Switch to next camera
+                currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+
+                // Update status
+                statusDiv.textContent = 'Switching camera...';
+                statusDiv.className = 'text-center mt-4 text-yellow-400 text-sm';
+
+                // Start new camera
+                setTimeout(() => {
+                    startCamera(currentCameraIndex);
+                }, 300);
+            }).catch(err => {
+                console.error('Error stopping camera:', err);
+            });
+        });
+
+        // Verify QR payload with backend
+        function verifyQRPayload(payload) {
+            fetch('/scan/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ qr_data: payload })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    showResult(data);
+
+                    // Resume scanning after 3 seconds
+                    setTimeout(() => {
+                        resultContainer.classList.add('hidden');
+                        html5QrCode.resume();
+                        statusDiv.textContent = 'Point camera at QR code';
+                        statusDiv.className = 'text-center mt-4 text-green-400 text-sm';
+                    }, 4000);
+                })
+                .catch(error => {
+                    showResult({
+                        success: false,
+                        status: 'ERROR',
+                        message: 'Network error'
+                    });
+                    setTimeout(() => {
+                        resultContainer.classList.add('hidden');
+                        html5QrCode.resume();
+                    }, 3000);
+                });
+        }
+
+        // Display result
+        function showResult(data) {
+            resultContainer.classList.remove('hidden');
+
+            let icon, title, subtitle, bgClass;
+
+            if (data.status === 'VALID') {
+                icon = '<svg class="w-16 h-16 text-green-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+                title = 'ENTRY ALLOWED';
+                subtitle = data.ticket ? `Team: ${data.ticket.team_name}` : '';
+                bgClass = 'border-2 border-green-500/50 bg-green-500/10';
+            } else if (data.status === 'USED') {
+                icon = '<svg class="w-16 h-16 text-yellow-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+                title = 'ALREADY USED';
+                subtitle = data.ticket ? `Team: ${data.ticket.team_name}` : 'Ticket already scanned';
+                bgClass = 'border-2 border-yellow-500/50 bg-yellow-500/10';
+            } else {
+                icon = '<svg class="w-16 h-16 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+                title = 'INVALID TICKET';
+                subtitle = data.message || 'QR code not recognized';
+                bgClass = 'border-2 border-red-500/50 bg-red-500/10';
+            }
+
+            resultCard.className = `glass rounded-xl p-8 text-center ${bgClass}`;
+            resultCard.innerHTML = `
+            ${icon}
+            <h2 class="text-2xl font-bold text-white mb-2">${title}</h2>
+            <p class="text-gray-300">${subtitle}</p>
+            ${data.timestamp ? `<p class="text-gray-500 text-sm mt-2">Scanned at: ${new Date(data.timestamp).toLocaleString()}</p>` : ''}
+        `;
+
+            // Play sound feedback
+            if (data.status === 'VALID') {
+                playBeep(800, 200); // High pitch for success
+            } else {
+                playBeep(300, 300); // Low pitch for error
+            }
+        }
+
+        // Simple beep function
+        function playBeep(frequency, duration) {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.frequency.value = frequency;
+                oscillator.type = 'sine';
+                gainNode.gain.value = 0.3;
+
+                oscillator.start();
+                setTimeout(() => oscillator.stop(), duration);
+            } catch (e) {
+                // Audio not supported
+            }
+        }
+
+        // Manual form submission
+        document.getElementById('manual-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const ticketId = document.getElementById('manual-ticket-id').value.trim().toUpperCase();
+
+            if (!ticketId) return;
+
+            // For manual entry, we need to check by ticket ID
+            fetch('/scan/api/check/' + ticketId)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.exists) {
+                        showResult({
+                            success: false,
+                            status: 'INVALID',
+                            message: 'Ticket not found'
+                        });
+                    } else if (data.used) {
+                        showResult({
+                            success: false,
+                            status: 'USED',
+                            message: 'Already used',
+                            ticket: data.ticket
+                        });
+                    } else {
+                        // Mark attendance via manual route
+                        fetch('/scan/manual', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: 'ticket_id=' + ticketId
+                        })
+                            .then(() => {
+                                showResult({
+                                    success: true,
+                                    status: 'VALID',
+                                    message: 'Entry allowed',
+                                    ticket: data.ticket,
+                                    timestamp: new Date().toISOString()
+                                });
+                            });
+                    }
+
+                    document.getElementById('manual-ticket-id').value = '';
+
+                    setTimeout(() => {
+                        resultContainer.classList.add('hidden');
+                    }, 4000);
+                });
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,25 @@
+# Event Ticketing Application Dependencies
+# =========================================
+#
+# This file lists all Python dependencies for the Event Ticketing System.
+# Install with: pip install -r requirements.txt
+
+# Core Framework
+Flask>=2.3.0
+
+# Production Server
+gunicorn>=21.2.0
+
+# Security
+bcrypt>=4.0.0
+cryptography>=41.0.0
+
+# QR Code Generation
+qrcode[pil]>=7.4.0
+Pillow>=10.0.0
+
+# PDF Generation
+reportlab>=4.0.0
+
+# Vercel Deployment
+# No additional dependencies required - Vercel auto-detects Flask
