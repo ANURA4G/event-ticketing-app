@@ -14,8 +14,22 @@ import os
 import json
 from datetime import datetime
 
-# Path to data directory
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+# Path to data directory - improved for serverless
+# Try multiple path resolution strategies
+script_dir = os.path.dirname(os.path.abspath(__file__))
+app_dir = os.path.dirname(script_dir)
+DATA_DIR = os.path.join(app_dir, 'data')
+
+# Fallback for serverless environments
+if not os.path.exists(DATA_DIR):
+    # Try alternative paths
+    alt_data_dir = os.path.join(os.getcwd(), 'app', 'data')
+    if os.path.exists(alt_data_dir):
+        DATA_DIR = alt_data_dir
+    else:
+        # Create data directory if it doesn't exist
+        DATA_DIR = os.path.join(app_dir, 'data')
+        os.makedirs(DATA_DIR, exist_ok=True)
 
 # Data file names
 USERS_FILE = 'users.json'
@@ -28,12 +42,35 @@ def load_json(filename: str) -> dict:
     filepath = os.path.join(DATA_DIR, filename)
     
     if not os.path.exists(filepath):
+        # Return default structure based on filename
+        if filename == USERS_FILE:
+            return {"users": []}
+        elif filename == TICKETS_FILE:
+            return {"tickets": []}
+        elif filename == ATTENDANCE_FILE:
+            return {"attendance": []}
         return {}
     
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
+            data = json.load(f)
+            # Ensure data has proper structure
+            if filename == USERS_FILE and 'users' not in data:
+                data['users'] = []
+            elif filename == TICKETS_FILE and 'tickets' not in data:
+                data['tickets'] = []
+            elif filename == ATTENDANCE_FILE and 'attendance' not in data:
+                data['attendance'] = []
+            return data
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading {filename}: {e}")
+        # Return proper default structure
+        if filename == USERS_FILE:
+            return {"users": []}
+        elif filename == TICKETS_FILE:
+            return {"tickets": []}
+        elif filename == ATTENDANCE_FILE:
+            return {"attendance": []}
         return {}
 
 

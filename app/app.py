@@ -18,6 +18,7 @@ from flask import Flask, render_template
 # Import blueprints
 from routes.auth import auth_bp
 from routes.admin import admin_bp
+from routes.user import user_bp
 from routes.scan import scan_bp
 
 # Import security for secret key
@@ -33,6 +34,7 @@ app.config['SESSION_TYPE'] = 'filesystem'
 # Register blueprints
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(user_bp)
 app.register_blueprint(scan_bp)
 
 

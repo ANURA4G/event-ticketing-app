@@ -53,6 +53,35 @@ def login():
     return render_template('login_admin.html')
 
 
+@auth_bp.route('/login/user', methods=['GET', 'POST'])
+def login_user():
+    """User login page."""
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        # Check user credentials from JSON
+        data = load_json('users.json')
+        users = data.get('users', [])
+        
+        for user in users:
+            if user.get('username') == username and user.get('role') == 'user':
+                if user.get('password_plain') == password:
+                    session['user_id'] = user.get('id')
+                    session['username'] = username
+                    session['role'] = 'user'
+                    flash('Welcome!', 'success')
+                    return redirect(url_for('user.dashboard'))
+        
+        flash('Invalid credentials', 'error')
+        return redirect(url_for('auth.login_user'))
+    
+    return render_template('login_user.html')
+        return redirect(url_for('auth.login'))
+    
+    return render_template('login_admin.html')
+
+
 @auth_bp.route('/logout')
 def logout():
     """Handle logout for both user and admin."""
