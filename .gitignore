@@ -1,4 +1,6 @@
+# Python
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -9,17 +11,42 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-.DS_Store
+
+# Python version files (let deployment platforms handle this)
+.python-version
+python-version
+.uv
+uv.lock
+
+# Environment and secrets
 .env
-.venv
+.env.local
+.env.production
 *.log
+
+# IDEs and editors
+.DS_Store
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# Testing and coverage
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
 
+# Deployment platforms
 .vercel
+.netlify
+
+# Application-specific (comment out if you want to track these)
+# app/static/pdf/
+# app/static/qr/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
