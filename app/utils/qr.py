@@ -13,6 +13,7 @@ Security:
 import os
 import json
 import time
+from io import BytesIO
 
 # Try to import qrcode, use placeholder if not available
 try:
@@ -23,14 +24,6 @@ except ImportError:
     HAS_QRCODE = False
 
 from utils.security import encrypt_data, decrypt_data, generate_signature, verify_signature
-
-# Directory for storing QR code images
-QR_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'qr')
-
-
-def ensure_qr_dir():
-    """Ensure the QR directory exists."""
-    os.makedirs(QR_DIR, exist_ok=True)
 
 
 def generate_qr_payload(ticket_id: str, user_id: str, team_name: str) -> str:
@@ -123,22 +116,20 @@ def decode_qr_payload(encrypted_payload: str) -> dict:
         }
 
 
-def generate_qr_image(payload: str, ticket_id: str) -> str:
+def generate_qr_image_bytes(payload: str) -> BytesIO:
     """
-    Generate a QR code image file.
+    Generate a QR code image in memory (BytesIO).
+    No files are stored on disk.
     
     Args:
         payload: The encrypted payload to encode
-        ticket_id: Ticket ID for filename
     
     Returns:
-        Path to the generated QR image file
+        BytesIO buffer containing the PNG image
     """
-    ensure_qr_dir()
-    filepath = os.path.join(QR_DIR, f"{ticket_id}.png")
+    buf = BytesIO()
     
     if HAS_QRCODE:
-        # Generate actual QR code
         qr = qrcode.QRCode(
             version=1,
             error_correction=ERROR_CORRECT_H,
@@ -147,22 +138,27 @@ def generate_qr_image(payload: str, ticket_id: str) -> str:
         )
         qr.add_data(payload)
         qr.make(fit=True)
-        
         img = qr.make_image(fill_color="black", back_color="white")
-        img.save(filepath)
+        img.save(buf, format='PNG')
     else:
-        # Fallback: Save payload as text file for debugging
-        with open(filepath, 'w') as f:
-            f.write(f"QR_PAYLOAD:{payload}")
+        buf.write(f"QR_PAYLOAD:{payload}".encode())
     
-    return filepath
+    buf.seek(0)
+    return buf
 
 
-def get_qr_path(ticket_id: str) -> str:
-    """Get the file path for a ticket's QR code image."""
-    return os.path.join(QR_DIR, f"{ticket_id}.png")
-
-
-def get_qr_url(ticket_id: str) -> str:
-    """Get the URL path for serving the QR image."""
-    return f"/static/qr/{ticket_id}.png"
+def generate_qr_image_tempfile(payload: str) -> str:
+    """
+    Generate a QR code to a temporary file (needed for PDF embedding).
+    Caller should delete the file after use.
+    
+    Returns:
+        Path to temporary PNG file
+    """
+    import tempfile
+    buf = generate_qr_image_bytes(payload)
+    
+    tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+    tmp.write(buf.read())
+    tmp.close()
+    return tmp.name

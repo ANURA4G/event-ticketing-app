@@ -32,16 +32,13 @@ from utils.json_store import (
 
 from utils.qr import (
     generate_qr_payload,
-    generate_qr_image,
-    get_qr_path,
-    get_qr_url,
+    generate_qr_image_bytes,
+    generate_qr_image_tempfile,
     decode_qr_payload
 )
 
 from utils.pdf import (
     generate_ticket_pdf,
-    get_pdf_path,
-    get_pdf_url
 )
 
 __all__ = [
@@ -65,11 +62,8 @@ __all__ = [
     'mark_attendance',
     'get_stats',
     'generate_qr_payload',
-    'generate_qr_image',
-    'get_qr_path',
-    'get_qr_url',
+    'generate_qr_image_bytes',
+    'generate_qr_image_tempfile',
     'decode_qr_payload',
-    'generate_ticket_pdf',
-    'get_pdf_path',
-    'get_pdf_url'
+    'generate_ticket_pdf'
 ]

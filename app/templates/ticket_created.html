@@ -27,10 +27,10 @@
 
             <div class="bg-indigo-500/10 rounded-lg p-4 border border-indigo-500/30">
                 <div class="flex justify-between items-center">
-                    <span class="text-indigo-400 text-sm">Team Code (Manual Entry)</span>
+                    <span class="text-indigo-400 text-sm">Team Code</span>
                     <span class="text-indigo-300 font-mono font-bold text-xl">{{ ticket.user_id }}</span>
                 </div>
-                <p class="text-indigo-500/70 text-xs mt-2">Use this code if QR scanner doesn't work</p>
+                <p class="text-indigo-500/70 text-xs mt-2">Unique identifier for this team</p>
             </div>
 
             <div class="flex justify-between items-center py-3 border-b border-white/10">
@@ -42,11 +42,46 @@
                 <span class="text-gray-400">Team Leader Email</span>
                 <span class="text-white">{{ ticket.team_leader_email }}</span>
             </div>
-
-            <div class="flex justify-between items-center py-3">
+            {% if ticket.team_members %}
+            <div class="py-3 border-b border-white/10">
+                <span class="text-gray-400 block mb-3">Team Members</span>
+                <div class="space-y-2">
+                    {% for member in ticket.team_members %}
+                    <div class="flex items-center justify-between bg-white/5 rounded p-2">
+                        <span class="text-white">{{ member.name }}</span>
+                        {% if member.position == 'Team Leader' %}
+                        <span class="text-xs text-indigo-400 bg-indigo-500/20 px-2 py-1 rounded">Leader</span>
+                        {% else %}
+                        <span class="text-xs text-gray-400">{{ member.position }}</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="flex justify-between items-center py-3 border-b border-white/10">
                 <span class="text-gray-400">Event Schedule</span>
                 <span class="text-white text-sm">{{ ticket.slot }}</span>
             </div>
+
+            {% if ticket.team_members %}
+            <div class="py-3">
+                <span class="text-gray-400 block mb-3">Team Members</span>
+                <div class="space-y-2">
+                    {% for member in ticket.team_members %}
+                    <div class="flex items-center gap-3 py-2 px-3 bg-white/5 rounded-lg">
+                        <div class="w-2 h-2 bg-indigo-400 rounded-full"></div>
+                        <span class="text-white flex-1">{{ member.name }}</span>
+                        {% if member.position == 'Team Leader' %}
+                        <span class="text-xs text-indigo-400 bg-indigo-500/20 px-2 py-1 rounded">Leader</span>
+                        {% else %}
+                        <span class="text-xs text-gray-500">{{ member.position }}</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 

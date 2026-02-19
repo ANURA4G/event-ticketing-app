@@ -21,10 +21,22 @@ from utils.json_store import (
     add_ticket, get_all_tickets, get_all_users,
     get_attendance_records, get_stats, get_ticket_by_id, delete_ticket
 )
-from utils.qr import generate_qr_payload, generate_qr_image
+from utils.qr import generate_qr_payload, generate_qr_image_bytes, generate_qr_image_tempfile
 from utils.pdf import generate_ticket_pdf
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
+
+
+# ============================================================
+# ADMIN AUTH CHECK
+# ============================================================
+
+@admin_bp.before_request
+def require_admin():
+    """Require admin login for all admin routes."""
+    if session.get('role') != 'admin':
+        flash('Please login to access admin panel', 'error')
+        return redirect(url_for('auth.login'))
 
 
 # ============================================================
@@ -95,10 +107,23 @@ def create_ticket():
         team_name = request.form.get('team_name', '').strip()
         college_name = request.form.get('college_name', '').strip()
         team_leader_email = request.form.get('team_leader_email', '').strip()
+        team_code = request.form.get('team_code', '').strip()
         team_size = request.form.get('team_size', '3').strip()
         slot = request.form.get('slot', '20 Feb 9:00 AM - 21 Feb 9:00 AM').strip()
         event_name = request.form.get('event_name', 'HACKFEST2K26').strip()
         
+        # Get team member names
+        team_members = []
+        for i in range(1, int(team_size) + 1):
+            member_name = request.form.get(f'member_{i}_name', '').strip()
+            if member_name:
+                team_members.append({
+                    'name': member_name,
+                    'position': 'Team Leader' if i == 1 else f'Member {i}',
+                    'member_id': i
+                })
+        
+        # Validation
         if not team_name:
             flash('Team name is required', 'error')
             return redirect(url_for('admin.create_ticket'))
@@ -111,8 +136,28 @@ def create_ticket():
             flash('Team leader email is required', 'error')
             return redirect(url_for('admin.create_ticket'))
         
-        # Generate unique identifiers
-        user_id = generate_user_id()
+        if not team_code:
+            flash('Team code is required', 'error')
+            return redirect(url_for('admin.create_ticket'))
+        
+        if len(team_members) != int(team_size):
+            flash('All team member names are required', 'error')
+            return redirect(url_for('admin.create_ticket'))
+        
+        # Validate team code length
+        if len(team_code) > 15:
+            flash('Team code must be 15 characters or less', 'error')
+            return redirect(url_for('admin.create_ticket'))
+        
+        # Check if team code already exists
+        all_tickets = get_all_tickets()
+        for ticket in all_tickets:
+            if ticket.get('user_id') == team_code.upper():
+                flash('Team code already exists. Please choose a different one.', 'error')
+                return redirect(url_for('admin.create_ticket'))
+        
+        # Use provided team code
+        user_id = team_code.upper()
         ticket_id = generate_ticket_id()
         
         # Generate encrypted QR payload (deterministic - same payload every time)
@@ -125,7 +170,8 @@ def create_ticket():
             'team_name': team_name,
             'college_name': college_name,
             'team_leader_email': team_leader_email,
-            'team_size': team_size,
+            'team_size': int(team_size),
+            'team_members': team_members,
             'slot': slot,
             'event_name': event_name,
             'qr_payload': qr_payload,
@@ -143,6 +189,7 @@ def create_ticket():
             'team_name': team_name,
             'college_name': college_name,
             'team_leader_email': team_leader_email,
+            'team_members': team_members,
             'slot': slot
         }
         
@@ -170,30 +217,29 @@ def ticket_detail(ticket_id):
         flash('Ticket not found', 'error')
         return redirect(url_for('admin.tickets'))
     
-    ticket['qr_url'] = get_qr_url(ticket_id)
-    ticket['pdf_url'] = get_pdf_url(ticket_id)
+    ticket['qr_url'] = url_for('admin.download_qr', ticket_id=ticket_id)
+    ticket['pdf_url'] = url_for('admin.download_pdf', ticket_id=ticket_id)
     
     return render_template('ticket_detail.html', ticket=ticket)
 
 
 @admin_bp.route('/tickets/<ticket_id>/qr')
 def download_qr(ticket_id):
-    """Download QR code image for a ticket (generated on-demand)."""
+    """Download QR code image for a ticket (generated in memory, not stored)."""
     ticket = get_ticket_by_id(ticket_id)
     if not ticket:
         flash('Ticket not found', 'error')
         return redirect(url_for('admin.tickets'))
     
-    # Generate QR image from stored payload
     qr_payload = ticket.get('qr_payload')
     if not qr_payload:
         flash('QR payload not found', 'error')
         return redirect(url_for('admin.tickets'))
     
     try:
-        # Generate QR image on-demand
-        qr_path = generate_qr_image(qr_payload, ticket_id)
-        return send_file(qr_path, as_attachment=True, download_name=f'{ticket_id}_qr.png')
+        qr_buffer = generate_qr_image_bytes(qr_payload)
+        return send_file(qr_buffer, mimetype='image/png',
+                         as_attachment=True, download_name=f'{ticket_id}_qr.png')
     except Exception as e:
         flash(f'Failed to generate QR code: {str(e)}', 'error')
         return redirect(url_for('admin.tickets'))
@@ -201,18 +247,19 @@ def download_qr(ticket_id):
 
 @admin_bp.route('/tickets/<ticket_id>/pdf')
 def download_pdf(ticket_id):
-    """Download PDF for a ticket (generated on-demand)."""
+    """Download PDF for a ticket (generated in memory, not stored)."""
     ticket = get_ticket_by_id(ticket_id)
     if not ticket:
         flash('Ticket not found', 'error')
         return redirect(url_for('admin.tickets'))
     
     try:
-        # Generate QR image temporarily
+        import os
+        # Generate QR to temp file (needed for PDF embedding)
         qr_payload = ticket.get('qr_payload')
-        temp_qr_path = generate_qr_image(qr_payload, ticket_id)
+        temp_qr_path = generate_qr_image_tempfile(qr_payload)
         
-        # Generate PDF with ticket data
+        # Generate PDF in memory
         pdf_data = {
             'ticket_id': ticket_id,
             'user_id': ticket.get('user_id'),
@@ -224,10 +271,16 @@ def download_pdf(ticket_id):
             'event_name': ticket.get('event_name'),
             'qr_path': temp_qr_path
         }
-        pdf_path = generate_ticket_pdf(pdf_data)
+        pdf_buffer = generate_ticket_pdf(pdf_data)
         
-        # Send file (QR will be cleaned up later or on next generation)
-        return send_file(pdf_path, as_attachment=True, download_name=f'{ticket_id}_pass.pdf')
+        # Clean up temp QR file
+        try:
+            os.unlink(temp_qr_path)
+        except:
+            pass
+        
+        return send_file(pdf_buffer, mimetype='application/pdf',
+                         as_attachment=True, download_name=f'{ticket_id}_pass.pdf')
     except Exception as e:
         flash(f'Failed to generate PDF: {str(e)}', 'error')
         return redirect(url_for('admin.tickets'))
@@ -333,9 +386,8 @@ def api_create_ticket():
     }
     add_user(user_data)
     
-    # Generate QR
+    # Generate QR payload (stored in JSON, not as file)
     qr_payload = generate_qr_payload(ticket_id, user_id, team_name)
-    qr_path = generate_qr_image(qr_payload, ticket_id)
     
     # Create ticket
     ticket_data = {
@@ -350,23 +402,11 @@ def api_create_ticket():
     }
     add_ticket(ticket_data)
     
-    # Generate PDF
-    pdf_data = {
-        'ticket_id': ticket_id,
-        'user_id': user_id,
-        'team_name': team_name,
-        'slot': slot,
-        'event_name': event_name,
-        'temp_password': temp_password,
-        'qr_path': qr_path
-    }
-    generate_ticket_pdf(pdf_data)
-    
     return jsonify({
         'success': True,
         'ticket_id': ticket_id,
         'user_id': user_id,
         'temp_password': temp_password,
-        'qr_url': get_qr_url(ticket_id),
-        'pdf_url': get_pdf_url(ticket_id)
+        'qr_url': url_for('admin.download_qr', ticket_id=ticket_id),
+        'pdf_url': url_for('admin.download_pdf', ticket_id=ticket_id)
     })

@@ -120,8 +120,17 @@
                 </a>
 
                 <div class="flex items-center gap-4">
-                    <a href="/admin/dashboard" class="text-gray-300 hover:text-white text-sm">Dashboard</a>
-                    <a href="/scan" class="text-gray-300 hover:text-white text-sm">Scanner</a>
+                    {% if session.get('role') == 'admin' %}
+                    <a href="/admin/dashboard" class="text-gray-300 hover:text-white text-sm transition">Dashboard</a>
+                    <a href="/scan" class="text-gray-300 hover:text-white text-sm transition">Scanner</a>
+                    <a href="/admin/attendance" class="text-gray-300 hover:text-white text-sm transition">Attendance</a>
+                    <a href="/logout"
+                        class="px-3 py-1.5 bg-red-500/20 text-red-400 text-sm rounded-lg hover:bg-red-500/30 border border-red-500/30 transition">
+                        Logout
+                    </a>
+                    {% else %}
+                    <a href="/login" class="px-4 py-2 btn-primary-custom rounded-lg text-sm">Admin Login</a>
+                    {% endif %}
                 </div>
             </div>
         </div>

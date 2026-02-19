@@ -17,7 +17,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from utils.qr import decode_qr_payload
 from utils.json_store import (
     get_ticket_by_id, mark_attendance, is_ticket_used,
-    get_attendance_by_ticket
+    get_attendance_by_ticket, mark_team_attendance_record
 )
 
 scan_bp = Blueprint('scan', __name__, url_prefix='/scan')
@@ -100,44 +100,129 @@ def verify():
             'message': 'Ticket data mismatch - possible tampering'
         })
     
-    # Step 4: Check if already used
+# Step 4: Check if team already checked in
     if is_ticket_used(ticket_id):
         existing = get_attendance_by_ticket(ticket_id)
         return jsonify({
             'success': False,
             'status': 'USED',
-            'message': 'Ticket already used for entry',
+            'message': 'Team already checked in',
             'scanned_at': existing.get('timestamp'),
             'ticket': {
                 'ticket_id': ticket_id,
                 'team_name': ticket.get('team_name'),
-                'user_id': user_id
-            }
+                'user_id': user_id,
+                'team_members': ticket.get('team_members', [])
+            },
+            'attendance_details': existing.get('member_attendance', [])
+        })
+
+    # Step 5: Show team member selection for attendance
+    return jsonify({
+        'success': True,
+        'status': 'TEAM_ATTENDANCE',
+        'message': 'Select team members present',
+        'ticket': {
+            'ticket_id': ticket_id,
+            'team_name': ticket.get('team_name'),
+            'user_id': user_id,
+            'slot': ticket.get('slot'),
+            'event_name': ticket.get('event_name'),
+            'team_members': ticket.get('team_members', []),
+            'team_size': ticket.get('team_size', 3)
+        }
+    })
+
+
+@scan_bp.route('/team-attendance', methods=['POST'])
+def mark_team_attendance():
+    """
+    Mark attendance for selected team members.
+    
+    Expects JSON with:
+    - ticket_id: Team ticket ID
+    - present_members: List of member IDs that are present
+    """
+    data = request.get_json() or {}
+    ticket_id = data.get('ticket_id', '').strip()
+    present_member_ids = data.get('present_members', [])
+    
+    if not ticket_id:
+        return jsonify({
+            'success': False,
+            'message': 'Ticket ID is required'
         })
     
-    # Step 5: Mark attendance
+    # Verify ticket exists
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket:
+        return jsonify({
+            'success': False,
+            'message': 'Ticket not found'
+        })
+    
+    # Check if already processed
+    if is_ticket_used(ticket_id):
+        return jsonify({
+            'success': False,
+            'status': 'USED',
+            'message': 'Team attendance already recorded'
+        })
+    
+    # Get team members
+    team_members = ticket.get('team_members', [])
+    if not team_members:
+        return jsonify({
+            'success': False,
+            'message': 'No team members found for this ticket'
+        })
+    
+    # Build member attendance records
+    member_attendance = []
+    present_count = 0
+    
+    for member in team_members:
+        member_id = member.get('member_id')
+        is_present = str(member_id) in [str(mid) for mid in present_member_ids]
+        
+        member_attendance.append({
+            'member_id': member_id,
+            'name': member.get('name'),
+            'position': member.get('position'),
+            'status': 'present' if is_present else 'absent'
+        })
+        
+        if is_present:
+            present_count += 1
+    
+    # Mark team attendance
     scanned_by = session.get('username', 'scanner')
-    result = mark_attendance(ticket_id, scanned_by)
+    result = mark_team_attendance_record(ticket_id, member_attendance, scanned_by)
     
     if result.get('success'):
         return jsonify({
             'success': True,
             'status': 'VALID',
-            'message': '✅ Entry Allowed',
+            'message': f'✅ Team Attendance Recorded - {present_count} members present',
             'ticket': {
                 'ticket_id': ticket_id,
                 'team_name': ticket.get('team_name'),
-                'user_id': user_id,
+                'user_id': ticket.get('user_id'),
                 'slot': ticket.get('slot'),
                 'event_name': ticket.get('event_name')
+            },
+            'attendance_summary': {
+                'total_members': len(team_members),
+                'present_count': present_count,
+                'member_details': member_attendance
             },
             'timestamp': result.get('timestamp')
         })
     else:
         return jsonify({
             'success': False,
-            'status': result.get('status', 'INVALID'),
-            'message': result.get('message', 'Failed to mark attendance')
+            'status': 'ERROR',
+            'message': result.get('message', 'Failed to record attendance')
         })
 
 
@@ -178,7 +263,18 @@ def manual():
                 'scanned_at': existing.get('timestamp')
             })
         
-        # Mark attendance
+        # Check if team has members for individual attendance
+        team_members = ticket.get('team_members', [])
+        if len(team_members) > 1:
+            return render_template('scan_result.html', result={
+                'success': True,
+                'status': 'TEAM_ATTENDANCE',
+                'message': 'Select team members for attendance',
+                'ticket': ticket,
+                'team_members': team_members
+            })
+        
+        # Mark attendance for single person team
         scanned_by = session.get('username', 'manual')
         result = mark_attendance(ticket_id, scanned_by)
         
@@ -263,3 +359,76 @@ def api_check(ticket_id):
             'slot': ticket.get('slot')
         }
     })
+
+
+@scan_bp.route('/api/ticket-details/<ticket_id>')
+def api_ticket_details(ticket_id):
+    """
+    API endpoint to get full ticket details including team members and attendance status.
+    Used by the manual entry flow to decide whether to show team member selection.
+    """
+    ticket_id = ticket_id.strip().upper()
+    ticket = get_ticket_by_id(ticket_id)
+    
+    if not ticket:
+        return jsonify({
+            'success': False,
+            'message': f'Ticket "{ticket_id}" not found'
+        })
+    
+    used = is_ticket_used(ticket_id)
+    attendance = get_attendance_by_ticket(ticket_id) if used else None
+    
+    return jsonify({
+        'success': True,
+        'used': used,
+        'ticket': {
+            'ticket_id': ticket_id,
+            'team_name': ticket.get('team_name'),
+            'user_id': ticket.get('user_id'),
+            'slot': ticket.get('slot'),
+            'event_name': ticket.get('event_name'),
+            'team_size': ticket.get('team_size', 1),
+            'team_members': ticket.get('team_members', [])
+        },
+        'scanned_at': attendance.get('timestamp') if attendance else None,
+        'attendance_details': attendance.get('member_attendance', []) if attendance else []
+    })
+
+
+@scan_bp.route('/api/mark-attendance', methods=['POST'])
+def api_mark_attendance():
+    """
+    API endpoint to mark simple attendance (no team member selection).
+    Used for teams with no individual member tracking.
+    """
+    data = request.get_json() or {}
+    ticket_id = data.get('ticket_id', '').strip().upper()
+    
+    if not ticket_id:
+        return jsonify({ 'success': False, 'status': 'INVALID', 'message': 'No ticket ID provided' })
+    
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket:
+        return jsonify({ 'success': False, 'status': 'INVALID', 'message': 'Ticket not found' })
+    
+    if is_ticket_used(ticket_id):
+        return jsonify({ 'success': False, 'status': 'USED', 'message': 'Already checked in' })
+    
+    scanned_by = session.get('username', 'manual')
+    result = mark_attendance(ticket_id, scanned_by)
+    
+    if result.get('success'):
+        return jsonify({
+            'success': True,
+            'status': 'VALID',
+            'message': 'Attendance recorded',
+            'ticket': {
+                'ticket_id': ticket_id,
+                'team_name': ticket.get('team_name'),
+                'user_id': ticket.get('user_id')
+            },
+            'timestamp': result.get('timestamp')
+        })
+    
+    return jsonify({ 'success': False, 'status': 'ERROR', 'message': result.get('message', 'Failed') })

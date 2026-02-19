@@ -40,8 +40,16 @@ app.register_blueprint(scan_bp)
 
 @app.route('/')
 def home():
-    """Landing page route - redirect to admin login."""
-    from flask import redirect, url_for
+    """Landing page route."""
+    return render_template('landing.html')
+
+
+@app.route('/admin')
+def admin_shortcut():
+    """Direct admin access route - requires login."""
+    from flask import redirect, url_for, session
+    if session.get('role') == 'admin':
+        return redirect(url_for('admin.dashboard'))
     return redirect(url_for('auth.login'))
 
 

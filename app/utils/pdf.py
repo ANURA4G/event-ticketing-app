@@ -7,6 +7,7 @@ Industrial grey aesthetic, centered on page.
 """
 
 import os
+from io import BytesIO
 
 try:
     from reportlab.lib import colors
@@ -17,8 +18,6 @@ try:
     HAS_REPORTLAB = True
 except ImportError:
     HAS_REPORTLAB = False
-
-PDF_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pdf')
 
 # ========== EVENT CONFIGURATION ==========
 EVENT = {
@@ -39,11 +38,6 @@ GREY_PANEL = colors.HexColor('#f2f2f2')
 WHITE = colors.HexColor('#ffffff')
 
 
-def ensure_pdf_dir():
-    """Create PDF directory if it doesn't exist."""
-    os.makedirs(PDF_DIR, exist_ok=True)
-
-
 def register_fonts():
     """Register JetBrains Mono font if available, fallback to Courier."""
     try:
@@ -56,28 +50,32 @@ def register_fonts():
         return 'Courier'
 
 
-def generate_ticket_pdf(ticket_data: dict) -> str:
+def generate_ticket_pdf(ticket_data: dict) -> BytesIO:
     """
-    Generate compact half-page ticket with JetBrains Mono font.
+    Generate compact half-page ticket PDF in memory (BytesIO).
+    No files are stored on disk.
     
     Layout: Horizontal, occupies ~50% of page height, centered.
     Left: Event details and participant info
     Right: QR code in grey panel
-    """
-    ensure_pdf_dir()
     
+    Returns:
+        BytesIO buffer containing the PDF
+    """
     ticket_id = ticket_data.get('ticket_id', 'UNKNOWN')
-    filepath = os.path.join(PDF_DIR, f"{ticket_id}.pdf")
     
     # Fallback if reportlab not available
     if not HAS_REPORTLAB:
-        with open(filepath, 'w') as f:
-            f.write(f"HACKFEST2K26\nTeam: {ticket_data.get('team_name')}\nID: {ticket_data.get('user_id')}\nTicket: {ticket_id}")
-        return filepath
+        buf = BytesIO()
+        buf.write(f"HACKFEST2K26\nTeam: {ticket_data.get('team_name')}\nID: {ticket_data.get('user_id')}\nTicket: {ticket_id}".encode())
+        buf.seek(0)
+        return buf
+    
+    buf = BytesIO()
     
     # ========== PAGE SETUP - LANDSCAPE A4 ==========
     page_width, page_height = landscape(A4)
-    c = canvas.Canvas(filepath, pagesize=landscape(A4))
+    c = canvas.Canvas(buf, pagesize=landscape(A4))
     
     # Register fonts
     font_family = register_fonts()
@@ -319,16 +317,7 @@ def generate_ticket_pdf(ticket_data: dict) -> str:
     footer_text = "This ticket is valid for one-time entry only. QR code will be scanned at the gate."
     c.drawCentredString(page_width / 2, footer_y, footer_text)
     
-    # ========== SAVE PDF ==========
+    # ========== SAVE PDF TO BUFFER ==========
     c.save()
-    return filepath
-
-
-def get_pdf_path(ticket_id: str) -> str:
-    """Get the file system path for a ticket PDF."""
-    return os.path.join(PDF_DIR, f"{ticket_id}.pdf")
-
-
-def get_pdf_url(ticket_id: str) -> str:
-    """Get the URL path for a ticket PDF."""
-    return f"/static/pdf/{ticket_id}.pdf"
+    buf.seek(0)
+    return buf

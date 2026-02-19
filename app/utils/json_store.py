@@ -102,7 +102,8 @@ def get_all_tickets() -> list:
 def get_attendance_records() -> list:
     """Get all attendance records."""
     data = load_json(ATTENDANCE_FILE)
-    return data.get('records', [])
+    # Use 'records' as the primary field, fallback to 'attendance' for compatibility
+    return data.get('records', data.get('attendance', []))
 
 
 # ============================================================
@@ -264,6 +265,59 @@ def is_ticket_used(ticket_id: str) -> bool:
     """Check if a ticket has already been used for entry."""
     record = get_attendance_by_ticket(ticket_id)
     return record.get('status') == 'present'
+
+
+def mark_team_attendance_record(ticket_id: str, member_attendance: list, scanned_by: str = 'admin') -> dict:
+    """
+    Mark attendance for a team with individual member tracking.
+    
+    Args:
+        ticket_id: Ticket ID
+        member_attendance: List of member attendance records
+        scanned_by: Who scanned the ticket
+    
+    Returns:
+        Result dictionary with success status and message
+    """
+    # Check if ticket exists
+    ticket = get_ticket_by_id(ticket_id)
+    if not ticket:
+        return {'success': False, 'message': 'Ticket not found', 'status': 'INVALID'}
+    
+    # Check if already used
+    if is_ticket_used(ticket_id):
+        existing = get_attendance_by_ticket(ticket_id)
+        return {
+            'success': False, 
+            'message': 'Team attendance already recorded',
+            'status': 'USED',
+            'scanned_at': existing.get('timestamp')
+        }
+    
+    # Create team attendance record
+    timestamp = datetime.now().isoformat()
+    record = {
+        'ticket_id': ticket_id,
+        'user_id': ticket.get('user_id'),
+        'team_name': ticket.get('team_name'),
+        'timestamp': timestamp,
+        'status': 'present',
+        'scanned_by': scanned_by,
+        'member_attendance': member_attendance,
+        'team_size': ticket.get('team_size', len(member_attendance)),
+        'present_count': len([m for m in member_attendance if m.get('status') == 'present'])
+    }
+    
+    add_attendance_record(record)
+    
+    return {
+        'success': True,
+        'message': 'Team attendance recorded',
+        'status': 'VALID',
+        'ticket': ticket,
+        'timestamp': timestamp,
+        'attendance_details': member_attendance
+    }
 
 
 def mark_attendance(ticket_id: str, scanned_by: str = 'admin') -> dict:
