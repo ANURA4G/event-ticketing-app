@@ -3,17 +3,16 @@ Flask Application Entry Point
 ==============================
 
 This is the main Flask application file.
-
-Responsibilities:
-- Create and configure the Flask application
-- Register all route blueprints (auth, admin, user, scan)
-- Set up session configuration
-- Define the landing page route
-- Configure static files and templates paths
 """
 
 import os
+import sys
 from flask import Flask, render_template
+
+# Add current directory to Python path for Vercel compatibility
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 # Import blueprints
 from routes.auth import auth_bp
